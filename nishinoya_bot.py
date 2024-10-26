@@ -1,0 +1,316 @@
+import os
+import discord
+from discord import app_commands
+from discord.ext import commands
+from dotenv import load_dotenv
+from typing import Final, Literal
+import asyncio
+import yt_dlp
+from urllib import parse, request
+from pathlib import Path
+import re
+import json
+
+BASE_DIR = Path(__file__).parent
+join_gif_path = BASE_DIR / 'resources' / 'join.gif'
+
+load_dotenv()
+BOT_TOKEN: Final[str] = os.getenv("BOT_TOKEN")
+USER_ID: Final[int] = int(os.getenv("USER_ID"))
+TEST_GUILD: Final[discord.Object] = discord.Object(id=int(os.getenv("TEST_GUILD")))
+EMBED_BLUE = 0x2c76dd
+EMBED_RED = 0xdf1141
+EMBED_GREEN = 0x0eaa51
+
+class MyClient(discord.Client):
+    def __init__(self, *, intents: discord.Intents):
+        super().__init__(intents=intents)
+        self.tree = app_commands.CommandTree(self)
+        
+        self.is_playing = {}
+        self.is_paused = {}
+        self.musicQueue = {}
+        self.queueIndex = {}
+
+        self.vc = {}
+
+    async def setup_hook(self):
+        self.tree.clear_commands(guild=TEST_GUILD)
+        self.tree.copy_global_to(guild=TEST_GUILD)
+        await self.tree.sync(guild=TEST_GUILD)
+        print('Bot synced.')
+
+def search_YT(search):
+    queryString = parse.urlencode({'search_query': search})
+    htmlContent = request.urlopen('https://youtube.com/results?' + queryString)
+    searchResults = list(set(re.findall('/watch\?v=(.{11})', htmlContent.read().decode())))
+    return searchResults[0:5]    
+
+def generate_now_playing_embed(interaction: discord.Interaction, song):
+    title = song['title']
+    link = song['link']
+    thumbnail = song['thumbnail']
+    author = interaction.user
+    avatar = author.avatar.url
+
+    embed = discord.Embed(
+        title='Now Playing',
+        description=f'[{title}]({link})',
+        colour=EMBED_GREEN
+    )
+    embed.set_thumbnail(url=thumbnail)
+    embed.set_footer(text=f'Song added by: {str(author.mention)}', icon_url=avatar)
+    return embed
+
+def generate_add_to_queue_embed(interaction: discord.Interaction, song):
+    title = song['title']
+    link = song['link']
+    thumbnail = song['thumbnail']
+    author = interaction.user
+    avatar = author.avatar.url
+
+    embed = discord.Embed(
+        title='Added to Queue',
+        description=f'[{title}]({link})',
+        colour=EMBED_BLUE
+    )
+    embed.set_thumbnail(url=thumbnail)
+    embed.set_footer(text=f'Song added by: {str(author.mention)}', icon_url=avatar)
+    return embed
+
+def reset_music_variables(client: MyClient):
+    client.is_playing[id] = client.is_paused[id] = False
+    client.musicQueue[id] = []
+    client.queueIndex[id] = 0
+
+
+'''Beginning of bot'''
+def run_bot():
+    intents = discord.Intents.all()
+
+    client = MyClient(intents=intents)
+
+    ytdl_options: Final[dict] = {'format': 'bestaudio/best', 'noplaylist': 'True'}
+    ffmpeg_options: Final[dict] = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
+    ytdl = yt_dlp.YoutubeDL(ytdl_options)
+
+    @client.event
+    async def on_ready():
+        print(f'We have logged in as {client.user}')
+        for guild in client.guilds:
+            id = int(guild.id)
+            client.musicQueue[id] = []
+            client.queueIndex[id] = 0
+            client.is_playing[id] = client.is_paused[id] = False
+            client.vc[id] = None
+        print('Bot is running...')
+
+    @client.event
+    async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+        id = int(member.guild.id)
+        if member.id != client.user.id and before.channel != None and after.channel != before.channel:
+            await asyncio.sleep(5)
+            remainingChannelMembers = before.channel.members
+            if len(remainingChannelMembers) == 1 and remainingChannelMembers[0].id == client.user.id and client.vc[id].is_connected():
+                reset_music_variables(client)
+                await client.vc[id].disconnect()
+
+    
+    async def join_voice(interaction: discord.Interaction, channel: discord.VoiceChannel):
+        id = int(interaction.guild_id)
+        if client.vc[id] == None or not client.vc[id].is_connected():
+            client.vc[id] = await channel.connect()
+
+            if client.vc[id] == None:
+                await interaction.response.send_message('Could not connect to the voice channel.')
+                return
+        elif interaction.user.voice.channel == client.vc[id].channel:
+            return
+        else:
+            await client.vc[id].move_to(channel)
+
+    def extract_YT(url):
+        try:
+            info = ytdl.extract_info(url, download=False)
+        except:
+            return False
+        
+        return {
+            'link': 'https://www.youtube.com/watch?v=' + url,
+            'thumbnail': 'https://i.ytimg.com/vi/' + url + '/hqdefault.jpg?sqp=-oaymwEcCOADEI4CSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLD5uL4xKN-IUfez6KIW_j5y70mlig',
+            'source': info.get('url'),
+            'title': info['title']
+        }
+    
+    def play_next(interaction: discord.Interaction):
+        id = int(interaction.guild_id)
+        if not client.is_playing[id]:
+            return
+        if client.queueIndex[id] + 1 < len(client.musicQueue[id]):
+            client.is_playing[id] = True
+            client.queueIndex[id] += 1
+
+            song = client.musicQueue[id][client.queueIndex[id]][0]
+            message = generate_now_playing_embed(interaction, song)
+            coro = interaction.channel.send(embed=message)
+            fut = asyncio.run_coroutine_threadsafe(coro, client.loop)
+            try:
+                fut.result()
+            except:
+                pass
+
+            client.vc[id].play(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), after=lambda e: play_next(interaction))
+        else:
+            client.queueIndex[id] += 1
+            client.is_playing[id] = False
+
+
+    async def play_music(interaction: discord.Interaction):
+        id = int(interaction.guild_id)
+        if client.queueIndex[id] < len(client.musicQueue[id]):
+            client.is_playing[id] = True
+            client.is_paused[id] = False
+
+            await join_voice(interaction, client.musicQueue[id][client.queueIndex[id]][1])
+            song = client.musicQueue[id][client.queueIndex[id]][0]
+
+            message = generate_now_playing_embed(interaction, song)
+            await interaction.followup.send(embed=message)
+
+            client.vc[id].play(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), after=lambda e: play_next(interaction))
+        else:
+            await interaction.followup.send('There are no songs in the queue.')
+            client.queueIndex[id] += 1
+            client.is_playing[id] = False
+
+
+    @client.event
+    async def on_guild_join(guild):
+        channel = discord.utils.get(guild.text_channels, name='general')
+        try:
+            await channel.send('The bot has joined.', file=discord.File(join_gif_path))
+        except Exception as e:
+            print(e)
+
+    @client.tree.command(name='hello', description='Command that returns "Hello!"')
+    async def hello(interaction: discord.Interaction):
+        await interaction.response.send_message('Hello!')
+
+    @client.tree.command(name='play', description='Play a song from YouTube or SoundCloud.')
+    async def play(interaction: discord.Interaction, source: Literal['YouTube','SoundCloud','URL'], query: str):
+        id = int(interaction.guild_id)
+        try:
+            userChannel = interaction.user.voice.channel
+        except:
+            await interaction.response.send_message('You need to be connected to a voice channel.')
+            return
+
+        await interaction.response.defer()
+
+        if source == 'YouTube':
+            song = extract_YT(search_YT(query)[0])
+            if type(song) == type(True):
+                await interaction.followup.send('Could not fetch the song.')
+                return
+            else:
+                client.musicQueue[id].append([song, userChannel])
+                if not client.is_playing[id]:
+                    await play_music(interaction)
+                else:
+                    message = generate_add_to_queue_embed(interaction, song)
+                    await interaction.followup.send(embed=message)
+        elif source == 'SoundCloud':
+            await interaction.followup.send('Not Implemented.')
+        elif source == 'URL':
+            await interaction.followup.send('Not Implemented.')
+        else:
+            await interaction.followup.send('Invalid source. Select a valid source.')
+
+    @client.tree.command(name='sync', description='Updates the command list.')
+    async def sync(interaction: discord.Interaction):
+        if interaction.user.id == USER_ID:
+            client.tree.copy_global_to(guild=TEST_GUILD)
+            synced = await client.tree.sync(guild=TEST_GUILD)
+            await interaction.response.send_message(f'Command Tree synced {len(synced)} commands: {[cmd.name for cmd in synced]}', ephemeral=True)
+        else:
+            await interaction.response.send_message('You are not dylan.')
+
+    @client.tree.command(name='join', description='Nishinoya joins your voice chat channel.')
+    async def join(interaction: discord.Interaction):
+        if interaction.user.voice:
+            await join_voice(interaction, interaction.user.voice.channel)
+            await interaction.response.send_message(f'Nishinoya has joined {interaction.user.voice.channel}')
+        else:
+            await interaction.response.send_message('You need to be connected to a voice channel.')
+
+    @client.tree.command(name='leave', description='Nishinoya leaves the voice chat.')
+    async def leave(interaction: discord.Interaction):
+        id = int(interaction.guild_id)
+        reset_music_variables(client)
+        if client.vc[id] == None:
+            await interaction.response.send_message('Nishinoya is not in a voice channel.')
+        if client.vc[id] != None and interaction.user.voice.channel == client.vc[id].channel:
+            await client.vc[id].disconnect()
+            await interaction.response.send_message('Nishinoya has left the chat.')
+            client.vc[id] == None
+        else:
+            await interaction.response.send_message('You are not in the same voice channel as Nishinoya.')
+
+    @client.tree.command(name='pause', description='Pause the audio if playing.')
+    async def pause(interaction: discord.Interaction):
+        id = int(interaction.guild_id)
+        if not client.vc[id]:
+            await interaction.response.send_message('There is no audio to be paused at the moment.')
+        elif interaction.user.voice.channel != client.vc[id]:
+            await interaction.response.send_message('You need to be connected to the same voice channel.')
+        elif client.is_playing[id]:
+            await interaction.response.send_message('Audio paused.')
+            client.is_playing[id] = False
+            client.is_paused[id] = True
+            client.vc[id].pause()
+
+    @client.tree.command(name='resume', description='Resume the audio if playing.')
+    async def resume(interaction: discord.Interaction):
+        id = int(interaction.guild_id)
+        if not client.vc[id]:
+            await interaction.response.send_message('There is no audio to be resumed at the moment.')
+        elif interaction.user.voice.channel != client.vc[id]:
+            await interaction.response.send_message('You need to be connected to the same voice channel.')
+        elif client.is_paused[id]:
+            await interaction.response.send_message('Audio resumed.')
+            client.is_playing[id] = True
+            client.is_paused[id] = False
+            client.vc[id].resume()
+
+    @client.tree.command(name='skip', description='Skip the current audio if playing.')
+    async def skip(interaction: discord.Interaction):
+        id = int(interaction.guild_id)
+        await interaction.response.defer()
+        if not client.vc[id]:
+            await interaction.followup.send('The bot is not in a voice channel.')
+        elif interaction.user.voice.channel != client.vc[id].channel:
+            await interaction.followup.send('You need to be connected to the same voice channel.')
+        elif client.queueIndex[id] >= len(client.musicQueue) - 1:
+            await interaction.followup.send('There are no more songs in the queue.')
+            client.vc[id].pause()
+            reset_music_variables(client)
+        else:
+            client.vc[id].pause()
+            client.queueIndex[id] += 1
+            await play_music(interaction)
+
+    client.run(BOT_TOKEN)
+
+    '''
+    ALTERNATE WAY WHICH USES MESSAGE INSTEAD OF SLASH COMMAND
+    @client.event
+    async def on_message(message):
+        if message.author == client.user:
+            return
+
+        if message.content.startswith('$hello'):
+            await message.channel.send('Hello!')
+        
+        if message.content.startswith('$zimak'):
+            await message.channel.send('Zimak has the sweet succulent smell of a man dowsed in beautiful cologne made from the greenest forests of Heaven.')
+    '''
