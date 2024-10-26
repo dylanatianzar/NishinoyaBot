@@ -41,10 +41,10 @@ class MyClient(discord.Client):
         print('Bot synced.')
 
 def search_YT(search):
-    queryString = parse.urlencode({'search_query': search, 'sp': 'EgIQAQ%3D%3D'})
+    queryString = parse.urlencode({'search_query': search, 'gl': 'US', 'hl':'en'})
     htmlContent = request.urlopen('https://youtube.com/results?' + queryString)
     searchResults = list(set(re.findall('/watch\?v=(.{11})', htmlContent.read().decode())))
-    return searchResults[0:5]
+    return searchResults[:10]
 
 def get_YT_title(url):
     html_content = request.urlopen(url).read().decode()
@@ -138,7 +138,7 @@ def run_bot():
         except:
             return False
         
-        if ('YouTube' in url):
+        if ('YouTube' in url) or len(url) == 11:
             return {
                 'link': 'https://www.youtube.com/watch?v=' + url,
                 'thumbnail': 'https://i.ytimg.com/vi/' + url + '/hqdefault.jpg?sqp=-oaymwEcCOADEI4CSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLD5uL4xKN-IUfez6KIW_j5y70mlig',
@@ -258,7 +258,7 @@ def run_bot():
             embedText += f'{i+1} - [{name}]({url})\n\n'
         
         searchResultsEmbed = discord.Embed(
-            title='First 5 Search Results',
+            title='First 10 Search Results',
             description=embedText + 'Use !play <number> to select or !cancel to cancel selection.',
             colour=EMBED_RED
             )
@@ -275,7 +275,7 @@ def run_bot():
             tokens = message.content.split()
             if tokens[0] == '!cancel':
                 return None
-            if len(tokens) == 2 and 1 <= int(tokens[1]) <= 5:
+            if len(tokens) == 2 and 1 <= int(tokens[1]) <= 10:
                 return results[int(tokens[1]) - 1]
             else:
                 'Either invalid choice or format.'
