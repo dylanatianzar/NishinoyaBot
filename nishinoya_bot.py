@@ -9,8 +9,6 @@ import yt_dlp
 from urllib import parse, request
 from pathlib import Path
 import re
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 
 BASE_DIR = Path(__file__).parent
 join_gif_path = BASE_DIR / 'resources' / 'join.gif'
@@ -19,14 +17,9 @@ load_dotenv()
 BOT_TOKEN: Final[str] = os.getenv("BOT_TOKEN")
 USER_ID: Final[int] = int(os.getenv("USER_ID"))
 TEST_GUILD: Final[discord.Object] = discord.Object(id=int(os.getenv("TEST_GUILD")))
-GOOGLE_KEY: Final[str] = os.getenv("GOOGLE_KEY")
-YOUTUBE_API_SERVICE_NAME = 'youtube'
-YOUTUBE_API_VERSION = 'v3'
 EMBED_BLUE = 0x2c76dd
 EMBED_RED = 0xdf1141
 EMBED_GREEN = 0x0eaa51
-
-youtube = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, developerKey=GOOGLE_KEY)
 
 class MyClient(discord.Client):
     def __init__(self, *, intents: discord.Intents):
@@ -47,23 +40,11 @@ class MyClient(discord.Client):
         await self.tree.sync(guild=TEST_GUILD)
         print('Bot synced.')
 
-def search_YT(search: str):
-    searchResponse = youtube.search().list(
-        part = 'snippet',
-        maxResults = 5,
-        q = search,
-        regionCode = 'us',
-        relevanceLanguage = 'en',
-        type = 'video'
-    ).execute()
-
-    videoIds = []
-
-    for entry in searchResponse['items']:
-        videoIds.append(entry['id'].get('videoId'))
-
-    return videoIds
-
+def search_YT(search):
+    queryString = parse.urlencode({'search_query': search, 'sp': 'EgIQAQ%3D%3D'})
+    htmlContent = request.urlopen('https://youtube.com/results?' + queryString)
+    searchResults = list(set(re.findall('/watch\?v=(.{11})', htmlContent.read().decode())))
+    return searchResults[0:5]
 
 def get_YT_title(url):
     html_content = request.urlopen(url).read().decode()
@@ -197,7 +178,7 @@ def run_bot():
         if source == 'YouTube':
             input = await resultsYT(interaction, query)
             if input == None:
-                await interaction.channel.send('Action canceled or could not fetch results.')
+                await interaction.followup.send('Action canceled or could not fetch results.')
                 return
             song = extract_music_info(input)
             await play_song(interaction, song, userChannel)
