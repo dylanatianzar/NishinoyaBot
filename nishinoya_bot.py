@@ -12,6 +12,8 @@ import re
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+VERSION: Final[str] = 'v1'
+
 BASE_DIR = Path(__file__).parent
 join_gif_path = BASE_DIR / 'resources' / 'join.gif'
 
@@ -174,9 +176,9 @@ def run_bot():
         except Exception as e:
             print(e)
 
-    @client.tree.command(name='hello', description='Command that returns "Hello!"')
-    async def hello(interaction: discord.Interaction):
-        await interaction.response.send_message('Hello!')
+    @client.tree.command(name='version', description=VERSION)
+    async def version(interaction: discord.Interaction):
+        await interaction.response.send_message(VERSION)
 
     @client.tree.command(name='play', description='Play a song from YouTube or SoundCloud.')
     async def play(interaction: discord.Interaction, source: Literal['YouTube','SoundCloud','URL'], query: str):
