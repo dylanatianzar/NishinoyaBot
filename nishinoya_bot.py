@@ -42,9 +42,7 @@ class MyClient(discord.Client):
         self.vc = {}
 
     async def setup_hook(self):
-        self.tree.clear_commands(guild=TEST_GUILD)
-        self.tree.copy_global_to(guild=TEST_GUILD)
-        await self.tree.sync(guild=TEST_GUILD)
+        await self.tree.sync()
         print('Bot synced.')
 
 def search_YT(search: str):
@@ -130,7 +128,7 @@ def run_bot():
             await asyncio.sleep(5)
             remainingChannelMembers = before.channel.members
             if len(remainingChannelMembers) == 1 and remainingChannelMembers[0].id == client.user.id and client.vc[id].is_connected():
-                reset_music_variables(client)
+                reset_music_variables(client, id)
                 await client.vc[id].disconnect()
 
     
@@ -211,7 +209,7 @@ def run_bot():
 
     def play_next(interaction: discord.Interaction):
         id = int(interaction.guild_id)
-        if not client.is_playing[id] or client.disconnecting[id]:
+        if not client.is_playing[id] or client.disconnecting.get('id', False):
             return
         if client.queueIndex[id] + 1 < len(client.musicQueue[id]):
             client.is_playing[id] = True
@@ -301,8 +299,7 @@ def run_bot():
     @client.tree.command(name='sync', description='Updates the command list.')
     async def sync(interaction: discord.Interaction):
         if interaction.user.id == USER_ID:
-            client.tree.copy_global_to(guild=TEST_GUILD)
-            synced = await client.tree.sync(guild=TEST_GUILD)
+            synced = await client.tree.sync()
             await interaction.response.send_message(f'Command Tree synced {len(synced)} commands: {[cmd.name for cmd in synced]}', ephemeral=True)
         else:
             await interaction.response.send_message('You are not dylan.')
