@@ -123,7 +123,7 @@ def run_bot():
             client.vc[id] = None
         print('Bot is running...')
 
-    @client.event
+    @client.listen('on_voice_state_update')
     async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         id = int(member.guild.id)
         if member.id != client.user.id and before.channel != None and after.channel != before.channel:
@@ -366,24 +366,10 @@ def run_bot():
         elif client.queueIndex[id] >= len(client.musicQueue) - 1:
             await interaction.followup.send('There are no more songs in the queue.')
             client.vc[id].pause()
-            reset_music_variables(client)
+            reset_music_variables(client, id)
         else:
             client.vc[id].pause()
             client.queueIndex[id] += 1
             await play_music(interaction)
 
     client.run(BOT_TOKEN)
-
-    '''
-    ALTERNATE WAY WHICH USES MESSAGE INSTEAD OF SLASH COMMAND
-    @client.event
-    async def on_message(message):
-        if message.author == client.user:
-            return
-
-        if message.content.startswith('$hello'):
-            await message.channel.send('Hello!')
-        
-        if message.content.startswith('$zimak'):
-            await message.channel.send('Zimak has the sweet succulent smell of a man dowsed in beautiful cologne made from the greenest forests of Heaven.')
-    '''
