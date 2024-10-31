@@ -9,27 +9,26 @@ import yt_dlp
 from urllib import parse, request
 from pathlib import Path
 import re
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
+from cachetools import LRUCache, cached
+import generate_embed
+import youtube
 
 VERSION: Final[str] = 'v1'
 
 BASE_DIR = Path(__file__).parent
 join_gif_path = BASE_DIR / 'resources' / 'join.gif'
 
+'''
+LOAD TOKENS FROM ENV
+'''
 load_dotenv()
 BOT_TOKEN: Final[str] = os.getenv("BOT_TOKEN")
 USER_ID: Final[int] = int(os.getenv("USER_ID"))
 TEST_GUILD: Final[discord.Object] = discord.Object(id=int(os.getenv("TEST_GUILD")))
-GOOGLE_KEY: Final[str] = os.getenv("GOOGLE_KEY")
-YOUTUBE_API_SERVICE_NAME = 'youtube'
-YOUTUBE_API_VERSION = 'v3'
-EMBED_BLUE = 0x2c76dd
-EMBED_RED = 0xdf1141
-EMBED_GREEN = 0x0eaa51
 
-youtube = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, developerKey=GOOGLE_KEY)
-
+'''
+MyClient class used for client setup_hook and handle cross-server variables
+'''
 class MyClient(discord.Client):
     def __init__(self, *, intents: discord.Intents):
         super().__init__(intents=intents)
@@ -46,55 +45,6 @@ class MyClient(discord.Client):
     async def setup_hook(self):
         await self.tree.sync()
         print('Bot synced.')
-
-def search_YT(search: str):
-    searchResponse = youtube.search().list(
-        part = 'snippet',
-        maxResults = 5,
-        q = search,
-        regionCode = 'us',
-        relevanceLanguage = 'en',
-        type = 'video'
-    ).execute()
-    videoIds = []
-    for entry in searchResponse['items']:
-        videoIds.append(entry['id'].get('videoId'))
-    return videoIds
-
-def get_YT_title(url):
-    html_content = request.urlopen(url).read().decode()
-    title = re.search(r'<title>(.*?) - YouTube</title>', html_content)
-    return title.group(1) if title else "Title not found"
-
-def generate_now_playing_embed(interaction: discord.Interaction, song):
-    title = song['title']
-    link = song['link']
-    thumbnail = song['thumbnail']
-    author = interaction.user
-    avatar = author.avatar.url
-
-    embed = discord.Embed(
-        title='Now Playing',
-        description=f'[{title}]({link})\n\nSong added by: {author.mention}',
-        colour=EMBED_GREEN
-    )
-    embed.set_thumbnail(url=thumbnail)
-    return embed
-
-def generate_add_to_queue_embed(interaction: discord.Interaction, song):
-    title = song['title']
-    link = song['link']
-    thumbnail = song['thumbnail']
-    author = interaction.user
-    avatar = author.avatar.url
-
-    embed = discord.Embed(
-        title='Added to Queue',
-        description=f'[{title}]({link})\n\nSong added by: {author.mention}',
-        colour=EMBED_BLUE
-    )
-    embed.set_thumbnail(url=thumbnail)
-    return embed
 
 def reset_music_variables(client: MyClient, id):
     client.is_playing[id] = client.is_paused[id] = False
@@ -168,6 +118,9 @@ def run_bot():
                 'title': info['title']
             }
 
+    '''
+    ON GUILD JOIN SEND GIF
+    '''
     @client.event
     async def on_guild_join(guild):
         channel = discord.utils.find(lambda c: 'general' in c.name.lower(), guild.text_channels)
@@ -176,10 +129,17 @@ def run_bot():
         except Exception as e:
             print(e)
 
+    '''
+    TEST FUNCTION TO SEE VERSION
+    '''
     @client.tree.command(name='version', description=VERSION)
     async def version(interaction: discord.Interaction):
         await interaction.response.send_message(VERSION)
 
+
+    '''
+    PLAY FUNCTION
+    '''
     @client.tree.command(name='play', description='Play a song from YouTube or SoundCloud.')
     async def play(interaction: discord.Interaction, source: Literal['YouTube','SoundCloud','URL'], query: str):
         try:
@@ -218,16 +178,22 @@ def run_bot():
             client.queueIndex[id] += 1
 
             song = client.musicQueue[id][client.queueIndex[id]][0]
-            message = generate_now_playing_embed(interaction, song)
+            message = generate_embed.now_playing(interaction, song)
             coro = interaction.channel.send(embed=message)
             fut = asyncio.run_coroutine_threadsafe(coro, client.loop)
             try:
                 fut.result()
-            except:
-                pass
+            except Exception as e:
+                print(f'Error in play_next: {e}')
 
             client.vc[id].play(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), after=lambda e: play_next(interaction))
         else:
+            coro = interaction.followup.send('There are no songs in the queue.')
+            fut = asyncio.run_coroutine_threadsafe(coro, client.loop)
+            try:
+                fut.result()
+            except Exception as e:
+                print(f'Error in play_next: {e}')
             client.queueIndex[id] += 1
             client.is_playing[id] = False
 
@@ -241,7 +207,7 @@ def run_bot():
             await join_voice(interaction, client.musicQueue[id][client.queueIndex[id]][1])
             song = client.musicQueue[id][client.queueIndex[id]][0]
 
-            message = generate_now_playing_embed(interaction, song)
+            message = generate_embed.now_playing(interaction, song)
             await interaction.followup.send(embed=message)
 
             client.vc[id].play(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), after=lambda e: play_next(interaction))
@@ -260,22 +226,22 @@ def run_bot():
             if not client.is_playing[id]:
                 await play_music(interaction)
             else:
-                message = generate_add_to_queue_embed(interaction, song)
+                message = generate_embed.add_to_queue(interaction, song)
                 await interaction.followup.send(embed=message)
 
     async def resultsYT(interaction: discord.Interaction, keywords):
-        results = search_YT(keywords)
+        results = youtube.search_YT(keywords)
         embedText = ''
 
         for i, token in enumerate(results):
             url = 'https://www.youtube.com/watch?v=' + token
-            name = get_YT_title(url)
+            name = youtube.get_YT_title(url)
             embedText += f'{i+1} - [{name}]({url})\n\n'
         
         searchResultsEmbed = discord.Embed(
             title='First 10 Search Results',
             description=embedText + 'Use !play <number> to select or !cancel to cancel selection.',
-            colour=EMBED_RED
+            colour= 0x2c76dd
             )
 
         await interaction.followup.send(embed=searchResultsEmbed)
@@ -298,6 +264,9 @@ def run_bot():
             await interaction.followup.send('You took too long to reply. Please search again.')
             return None
 
+    '''
+    SYNC COMMANDTREE
+    '''
     @client.tree.command(name='sync', description='Updates the command list.')
     async def sync(interaction: discord.Interaction):
         if interaction.user.id == USER_ID:
@@ -306,6 +275,9 @@ def run_bot():
         else:
             await interaction.response.send_message('You are not dylan.')
 
+    '''
+    DIRECT JOIN VOICE FUNCTION
+    '''
     @client.tree.command(name='join', description='Nishinoya joins your voice chat channel.')
     async def join(interaction: discord.Interaction):
         if interaction.user.voice:
@@ -314,6 +286,9 @@ def run_bot():
         else:
             await interaction.response.send_message('You need to be connected to a voice channel.')
 
+    '''
+    DIRECT LEAVE VOICE FUNCTION
+    '''
     @client.tree.command(name='leave', description='Nishinoya leaves the voice chat.')
     async def leave(interaction: discord.Interaction):
         id = int(interaction.guild_id)
@@ -329,6 +304,9 @@ def run_bot():
         else:
             await interaction.response.send_message('You are not in the same voice channel as Nishinoya.')
 
+    '''
+    PAUSE AUDIO FUNCTION
+    '''
     @client.tree.command(name='pause', description='Pause the audio if playing.')
     async def pause(interaction: discord.Interaction):
         id = int(interaction.guild_id)
@@ -342,6 +320,9 @@ def run_bot():
             client.is_paused[id] = True
             client.vc[id].pause()
 
+    '''
+    RESUME AUDIO FUNCTION
+    '''
     @client.tree.command(name='resume', description='Resume the audio if playing.')
     async def resume(interaction: discord.Interaction):
         id = int(interaction.guild_id)
@@ -355,19 +336,29 @@ def run_bot():
             client.is_paused[id] = False
             client.vc[id].resume()
 
+    '''
+    SKIP MUSIC FUNCTION
+    '''
     @client.tree.command(name='skip', description='Skip the current audio if playing.')
     async def skip(interaction: discord.Interaction):
         id = int(interaction.guild_id)
-        await interaction.response.defer()
         if not client.vc[id]:
-            await interaction.followup.send('The bot is not in a voice channel.')
+            await interaction.response.send_message('The bot is not in a voice channel.')
+            return
         elif interaction.user.voice.channel != client.vc[id].channel:
-            await interaction.followup.send('You need to be connected to the same voice channel.')
-        elif client.queueIndex[id] >= len(client.musicQueue) - 1:
-            await interaction.followup.send('There are no more songs in the queue.')
+            await interaction.response.send_message('You need to be connected to the same voice channel.')
+            return
+        elif client.queueIndex[id] >= len(client.musicQueue[id]):
+            await interaction.response.send_message('There are no songs in the queue.')
             client.vc[id].pause()
             reset_music_variables(client, id)
-        else:
+            return
+        
+        song = client.musicQueue[id][client.queueIndex[id]][0]
+        embed = generate_embed.skip(interaction, song)
+        await interaction.response.send_message(embed=embed)
+
+        if client.queueIndex[id] < len(client.musicQueue) - 1:
             client.vc[id].pause()
             client.queueIndex[id] += 1
             await play_music(interaction)
