@@ -9,7 +9,6 @@ import yt_dlp
 from urllib import parse, request
 from pathlib import Path
 import re
-from cachetools import LRUCache, cached
 import generate_embed
 import youtube
 
@@ -357,6 +356,7 @@ def run_bot():
         song = client.musicQueue[id][client.queueIndex[id]][0]
         embed = generate_embed.skip(interaction, song)
         await interaction.response.send_message(embed=embed)
+        asyncio.sleep(1)
 
         if client.queueIndex[id] < len(client.musicQueue) - 1:
             client.vc[id].pause()

@@ -5,6 +5,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import re
 from urllib import parse, request
+from functools import lru_cache
 
 '''
 YOUTUBE CONSTANTS
@@ -15,6 +16,7 @@ YOUTUBE_API_SERVICE_NAME = 'youtube'
 YOUTUBE_API_VERSION = 'v3'
 youtube = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, developerKey=GOOGLE_KEY)
 
+@lru_cache(maxsize=20)
 def search_YT(search: str):
     searchResponse = youtube.search().list(
         part = 'snippet',
