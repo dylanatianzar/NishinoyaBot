@@ -123,7 +123,7 @@ def run_bot():
             client.vc[id] = None
         print('Bot is running...')
 
-    @client.listen('on_voice_state_update')
+    @client.event
     async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
         id = int(member.guild.id)
         if member.id != client.user.id and before.channel != None and after.channel != before.channel:
