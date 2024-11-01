@@ -14,7 +14,8 @@ import youtube
 
 VERSION: Final[str] = 'v1'
 
-BASE_DIR = Path(__file__).parent
+'''GET THE PATH TO THE JOIN.GIF FROM THE ROOT'''
+BASE_DIR = Path(__file__).parent.resolve().parent
 join_gif_path = BASE_DIR / 'resources' / 'join.gif'
 
 '''
