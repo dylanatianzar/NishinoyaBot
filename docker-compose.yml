@@ -6,4 +6,4 @@ services:
       context: .
       dockerfile: Dockerfile.local
     volumes:
-      - ./.env:/app/.env
+      - ./.env:/NishinoyaBot/.env
