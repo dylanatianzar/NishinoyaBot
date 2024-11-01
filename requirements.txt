@@ -1,0 +1,4 @@
+discord.py==2.4.0
+google_api_python_client==2.149.0
+python-dotenv==1.0.1
+yt_dlp==2024.10.22
