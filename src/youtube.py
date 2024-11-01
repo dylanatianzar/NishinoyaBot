@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from typing import Final
 from googleapiclient.discovery import build
@@ -10,7 +11,8 @@ from functools import lru_cache
 '''
 YOUTUBE CONSTANTS
 '''
-load_dotenv()
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 GOOGLE_KEY: Final[str] = os.getenv("GOOGLE_KEY")
 YOUTUBE_API_SERVICE_NAME = 'youtube'
 YOUTUBE_API_VERSION = 'v3'

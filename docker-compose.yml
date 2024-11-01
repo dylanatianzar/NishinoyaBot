@@ -1,9 +1,8 @@
 services:
   app:
     privileged: true
-    container_name: nishinoya
+    container_name: nishinoyabot
     build:
       context: .
       dockerfile: Dockerfile.local
-    volumes:
-      - ./.env:/NishinoyaBot/.env
+    env_file: .env

@@ -21,7 +21,8 @@ join_gif_path = BASE_DIR / 'resources' / 'join.gif'
 '''
 LOAD TOKENS FROM ENV
 '''
-load_dotenv()
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 BOT_TOKEN: Final[str] = os.getenv("BOT_TOKEN")
 USER_ID: Final[int] = int(os.getenv("USER_ID"))
 TEST_GUILD: Final[discord.Object] = discord.Object(id=int(os.getenv("TEST_GUILD")))
