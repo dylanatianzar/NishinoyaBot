@@ -40,7 +40,6 @@ class MyClient(discord.Client):
         self.musicQueue = {}
         self.queueIndex = {}
 
-        self.disconnecting = {}
         self.vc = {}
 
     async def setup_hook(self):
@@ -104,23 +103,23 @@ def run_bot():
     def extract_music_info(url):
         try:
             info = ytdl.extract_info(url, download=False)
+            # TODO Fix for YT, Spotify and Soundcloud flow
+            if ('youtube' in url) or len(url) == 11:
+                return {
+                    'link': 'https://www.youtube.com/watch?v=' + url,
+                    'thumbnail': 'https://i.ytimg.com/vi/' + url + '/hqdefault.jpg?sqp=-oaymwEcCOADEI4CSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLD5uL4xKN-IUfez6KIW_j5y70mlig',
+                    'source': info.get('url'),
+                    'title': info['title']
+                }
+            else:
+                return {
+                    'link': url,
+                    'thumbnail': info.get('thumbnail'),
+                    'source': info.get('url'),
+                    'title': info['title']
+                }
         except:
             return False
-        
-        if ('YouTube' in url) or len(url) == 11:
-            return {
-                'link': 'https://www.youtube.com/watch?v=' + url,
-                'thumbnail': 'https://i.ytimg.com/vi/' + url + '/hqdefault.jpg?sqp=-oaymwEcCOADEI4CSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLD5uL4xKN-IUfez6KIW_j5y70mlig',
-                'source': info.get('url'),
-                'title': info['title']
-            }
-        else:
-            return {
-                'link': url,
-                'thumbnail': info.get('thumbnail'),
-                'source': info.get('url'),
-                'title': info['title']
-            }
 
     '''
     ON GUILD JOIN SEND GIF
@@ -162,7 +161,7 @@ def run_bot():
                 await interaction.followup.send('Error with Spotify API. Likely ratelimited.')
                 return
             await interaction.followup.send('Not implemented.')
-        elif source == 'YouTube':
+        elif source == 'Youtube':
             try:
                 input = await resultsYT(interaction, query)
             except Exception as e:
@@ -184,34 +183,29 @@ def run_bot():
         else:
             await interaction.followup.send('Invalid source. Select a valid source.')
 
-    def play_next(interaction: discord.Interaction):
+    async def play_next(interaction: discord.Interaction):
         id = int(interaction.guild_id)
-        if not client.is_playing[id] or client.disconnecting.get('id', False):
-            return
         if client.queueIndex[id] + 1 < len(client.musicQueue[id]):
             client.is_playing[id] = True
             client.queueIndex[id] += 1
 
             song = client.musicQueue[id][client.queueIndex[id]][0]
             message = generate_embed.now_playing(interaction, song)
-            coro = interaction.channel.send(embed=message)
-            fut = asyncio.run_coroutine_threadsafe(coro, client.loop)
-            try:
-                fut.result()
-            except Exception as e:
-                print(f'Error in play_next: {e}')
+            await interaction.channel.send(embed=message)
 
-            client.vc[id].play(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), after=lambda e: play_next(interaction))
+            client.vc[id].play(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(interaction), client.loop))
         else:
-            coro = interaction.followup.send('There are no songs in the queue.')
-            fut = asyncio.run_coroutine_threadsafe(coro, client.loop)
-            try:
-                fut.result()
-            except Exception as e:
-                print(f'Error in play_next: {e}')
+            await interaction.followup.send('There are no songs in the queue.')
             client.queueIndex[id] += 1
             client.is_playing[id] = False
-
+            
+            # Handle leave if inactive
+            await asyncio.sleep(30)
+            if client.queueIndex[id] == len(client.musicQueue[id]):
+                await client.vc[id].disconnect()
+                await interaction.channel.send('Nishinoya has left the chat due to inactivity.')
+                client.vc[id] == None
+                reset_music_variables(client, id)
 
     async def play_music(interaction: discord.Interaction):
         id = int(interaction.guild_id)
@@ -225,7 +219,7 @@ def run_bot():
             message = generate_embed.now_playing(interaction, song)
             await interaction.followup.send(embed=message)
 
-            client.vc[id].play(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), after=lambda e: play_next(interaction))
+            client.vc[id].play(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(interaction), client.loop))
         else:
             await interaction.followup.send('There are no songs in the queue.')
             client.queueIndex[id] += 1
@@ -311,9 +305,7 @@ def run_bot():
         if client.vc[id] == None:
             await interaction.response.send_message('Nishinoya is not in a voice channel.')
         if client.vc[id] != None and interaction.user.voice.channel == client.vc[id].channel:
-            client.disconnecting[id] = True
             await client.vc[id].disconnect()
-            client.disconnecting[id] = False
             await interaction.response.send_message('Nishinoya has left the chat.')
             client.vc[id] == None
         else:
@@ -367,12 +359,12 @@ def run_bot():
             await interaction.response.send_message('There are no songs in the queue.')
             client.vc[id].pause()
             reset_music_variables(client, id)
+            # TODO Implement inactivity leave for Skip
             return
         
         song = client.musicQueue[id][client.queueIndex[id]][0]
         embed = generate_embed.skip(interaction, song)
         await interaction.response.send_message(embed=embed)
-        asyncio.sleep(1)
 
         if client.queueIndex[id] < len(client.musicQueue) - 1:
             client.vc[id].pause()
