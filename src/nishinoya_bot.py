@@ -12,7 +12,7 @@ import re
 import generate_embed
 import youtube
 
-VERSION: Final[str] = 'v1'
+VERSION: Final[str] = 'v1.01'
 
 '''GET THE PATH TO THE JOIN.GIF FROM THE ROOT'''
 BASE_DIR = Path(__file__).parent.resolve().parent
@@ -60,7 +60,10 @@ def run_bot():
     client = MyClient(intents=intents)
 
     ytdl_options: Final[dict] = {'format': 'bestaudio/best', 'noplaylist': 'True'}
-    ffmpeg_options: Final[dict] = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
+    ffmpeg_options: Final[dict] = {
+                                'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 
+                                'options': '-vn -af "loudnorm=i=-18:tp=-3:lra=7" -bufsize 64k -fflags +nobuffer'
+                                }
     ytdl = yt_dlp.YoutubeDL(ytdl_options)
 
     @client.event
@@ -141,8 +144,8 @@ def run_bot():
     '''
     PLAY FUNCTION
     '''
-    @client.tree.command(name='play', description='Play a song from YouTube or SoundCloud.')
-    async def play(interaction: discord.Interaction, source: Literal['YouTube','SoundCloud','URL'], query: str):
+    @client.tree.command(name='play', description='Play a song. (Supports Spotify, Youtube and Soundcloud)')
+    async def play(interaction: discord.Interaction, source: Literal['Spotify','Youtube','URL'], query: str):
         try:
             userChannel = interaction.user.voice.channel
         except:
@@ -151,15 +154,26 @@ def run_bot():
 
         await interaction.response.defer()
 
-        if source == 'YouTube':
-            input = await resultsYT(interaction, query)
+        if source == 'Spotify':
+            try:
+                pass
+            except Exception as e:
+                print(f'Exception occurred: {e}')
+                await interaction.followup.send('Error with Spotify API. Likely ratelimited.')
+                return
+            await interaction.followup.send('Not implemented.')
+        elif source == 'YouTube':
+            try:
+                input = await resultsYT(interaction, query)
+            except Exception as e:
+                print(f'Exception occurred: {e}')
+                await interaction.followup.send('Error with YouTube Search. Likely ratelimited for day.')
+                return
             if input == None:
                 await interaction.followup.send('Action canceled or could not fetch results.')
                 return
             song = extract_music_info(input)
             await play_song(interaction, song, userChannel)
-        elif source == 'SoundCloud':
-            await interaction.followup.send('Not Implemented.')
         elif source == 'URL':
             try:
                 query_info = extract_music_info(query)
