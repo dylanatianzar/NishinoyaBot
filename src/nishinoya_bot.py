@@ -13,6 +13,7 @@ import generate_embed
 import youtube
 
 VERSION: Final[str] = 'v1.01'
+VOLUME_FLOAT: float = 0.35
 
 '''GET THE PATH TO THE JOIN.GIF FROM THE ROOT'''
 BASE_DIR = Path(__file__).parent.resolve().parent
@@ -193,7 +194,7 @@ def run_bot():
             message = generate_embed.now_playing(interaction, song)
             await interaction.channel.send(embed=message)
 
-            client.vc[id].play(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(interaction), client.loop))
+            client.vc[id].play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), volume=VOLUME_FLOAT), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(interaction), client.loop))
         else:
             await interaction.followup.send('There are no songs in the queue.')
             client.queueIndex[id] += 1
@@ -219,7 +220,7 @@ def run_bot():
             message = generate_embed.now_playing(interaction, song)
             await interaction.followup.send(embed=message)
 
-            client.vc[id].play(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(interaction), client.loop))
+            client.vc[id].play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), volume=VOLUME_FLOAT), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(interaction), client.loop))
         else:
             await interaction.followup.send('There are no songs in the queue.')
             client.queueIndex[id] += 1
