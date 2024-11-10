@@ -41,6 +41,7 @@ class MyClient(discord.Client):
         self.musicQueue = {}
         self.queueIndex = {}
 
+        self.inactivity_check = {}
         self.vc = {}
 
     async def setup_hook(self):
@@ -51,6 +52,7 @@ def reset_music_variables(client: MyClient, id):
     client.is_playing[id] = client.is_paused[id] = False
     client.musicQueue[id] = []
     client.queueIndex[id] = 0
+    client.inactivity_check[id] = None
 
 
 '''Beginning of bot'''
@@ -170,7 +172,7 @@ def run_bot():
                 await interaction.followup.send('Error with YouTube Search. Likely ratelimited for day.')
                 return
             if input == None:
-                await interaction.followup.send('Action canceled or could not fetch results.')
+                await interaction.followup.send('Action cancelled or could not fetch results.')
                 return
             song = extract_music_info(input)
             await play_song(interaction, song, userChannel)
@@ -196,17 +198,14 @@ def run_bot():
 
             client.vc[id].play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), volume=VOLUME_FLOAT), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(interaction), client.loop))
         else:
-            await interaction.followup.send('There are no songs in the queue.')
-            client.queueIndex[id] += 1
-            client.is_playing[id] = False
-            
-            # Handle leave if inactive
-            await asyncio.sleep(30)
-            if client.queueIndex[id] == len(client.musicQueue[id]):
-                await client.vc[id].disconnect()
-                await interaction.channel.send('Nishinoya has left the chat due to inactivity.')
-                client.vc[id] == None
-                reset_music_variables(client, id)
+            if client.is_playing[id]:
+                await interaction.followup.send('There are no songs in the queue.')
+                client.is_playing[id] = False
+                
+                # Handle leave if inactive
+                if client.inactivity_check.get(id, False):
+                    client.inactivity_check[id].cancel()
+                client.inactivity_check[id] = asyncio.create_task(inactive_check(interaction, client, id))
 
     async def play_music(interaction: discord.Interaction):
         id = int(interaction.guild_id)
@@ -222,9 +221,13 @@ def run_bot():
 
             client.vc[id].play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), volume=VOLUME_FLOAT), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(interaction), client.loop))
         else:
-            await interaction.followup.send('There are no songs in the queue.')
-            client.queueIndex[id] += 1
+            await interaction.followup.send('ERROR: queueIndex >= musicQueue')
             client.is_playing[id] = False
+
+            # Handle leave if inactive
+            if client.inactivity_check.get(id, False):
+                client.inactivity_check[id].cancel()
+            client.inactivity_check[id] = asyncio.create_task(inactive_check(interaction, client, id))
 
     async def play_song(interaction: discord.Interaction, song, channel):
         id = int(interaction.guild_id)
@@ -232,6 +235,10 @@ def run_bot():
             await interaction.followup.send('Could not fetch the song.')
             return
         else:
+            if client.inactivity_check.get(id, False):
+                client.inactivity_check[id].cancel()
+                client.inactivity_check[id] = None
+                print('Inactivity check CANCELLED by PLAY SONG...', flush=True)
             client.musicQueue[id].append([song, channel])
             if not client.is_playing[id]:
                 await play_music(interaction)
@@ -302,13 +309,13 @@ def run_bot():
     @client.tree.command(name='leave', description='Nishinoya leaves the voice chat.')
     async def leave(interaction: discord.Interaction):
         id = int(interaction.guild_id)
-        reset_music_variables(client, id)
         if client.vc[id] == None:
             await interaction.response.send_message('Nishinoya is not in a voice channel.')
-        if client.vc[id] != None and interaction.user.voice.channel == client.vc[id].channel:
+        elif client.vc[id] != None and interaction.user.voice.channel == client.vc[id].channel:
             await client.vc[id].disconnect()
+            client.vc[id] = None
+            reset_music_variables(client, id)
             await interaction.response.send_message('Nishinoya has left the chat.')
-            client.vc[id] == None
         else:
             await interaction.response.send_message('You are not in the same voice channel as Nishinoya.')
 
@@ -356,20 +363,40 @@ def run_bot():
         elif interaction.user.voice.channel != client.vc[id].channel:
             await interaction.response.send_message('You need to be connected to the same voice channel.')
             return
-        elif client.queueIndex[id] >= len(client.musicQueue[id]):
-            await interaction.response.send_message('There are no songs in the queue.')
-            client.vc[id].pause()
-            reset_music_variables(client, id)
-            # TODO Implement inactivity leave for Skip
-            return
         
         song = client.musicQueue[id][client.queueIndex[id]][0]
         embed = generate_embed.skip(interaction, song)
         await interaction.response.send_message(embed=embed)
 
-        if client.queueIndex[id] < len(client.musicQueue) - 1:
+        client.queueIndex[id] += 1
+        if client.queueIndex[id] == len(client.musicQueue[id]):
+            await interaction.channel.send('There are no songs in the queue.')
+            client.is_playing[id] = False
+            client.vc[id].stop()
+
+            # Handle leave if inactive
+            if client.inactivity_check.get(id, False):
+                client.inactivity_check[id].cancel()
+            client.inactivity_check[id] = asyncio.create_task(inactive_check(interaction, client, id))
+            return
+        else:
             client.vc[id].pause()
             client.queueIndex[id] += 1
             await play_music(interaction)
+
+    async def inactive_check(interaction, client, id):
+        print('Starting inactivity check...', flush=True)
+        try:
+            await asyncio.sleep(10)
+            try:
+                await client.vc[id].disconnect()
+                await interaction.channel.send('Nishinoya has left the chat due to inactivity.')
+                client.vc[id] = None
+                reset_music_variables(client, id)
+                print('LEFT DUE TO INACTIVITY', flush=True)
+            except:
+                print('Bot already left voice chat...')
+        except asyncio.CancelledError:
+            print('Inactivity Check CANCELLED: Bot remains active...', flush=True)
 
     client.run(BOT_TOKEN)
