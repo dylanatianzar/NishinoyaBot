@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import generate_embed
 import youtube
+import spotify
 
 VERSION: Final[str] = 'v1.01'
 VOLUME_FLOAT: float = 0.35
@@ -106,21 +107,12 @@ def run_bot():
     def extract_music_info(url):
         try:
             info = ytdl.extract_info(url, download=False)
-            # TODO Fix for YT, Spotify and Soundcloud flow
-            if ('youtube' in url) or len(url) == 11:
-                return {
-                    'link': 'https://www.youtube.com/watch?v=' + url,
-                    'thumbnail': 'https://i.ytimg.com/vi/' + url + '/hqdefault.jpg?sqp=-oaymwEcCOADEI4CSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLD5uL4xKN-IUfez6KIW_j5y70mlig',
-                    'source': info.get('url'),
-                    'title': info['title']
-                }
-            else:
-                return {
-                    'link': url,
-                    'thumbnail': info.get('thumbnail'),
-                    'source': info.get('url'),
-                    'title': info['title']
-                }
+            return {
+                'link': info.get('url'),
+                'thumbnail': info.get('thumbnail'),
+                'source': info.get('url'),
+                'title': info['title']
+            }
         except:
             return False
 
@@ -178,34 +170,30 @@ def run_bot():
             await play_song(interaction, song, userChannel)
         elif source == 'URL':
             try:
-                query_info = extract_music_info(query)
+                song = extract_music_info(query)
             except:
                 await interaction.followup.send('Invalid URL.')
                 return
-            await play_song(interaction, query_info, userChannel)
+            await play_song(interaction, song, userChannel)
         else:
             await interaction.followup.send('Invalid source. Select a valid source.')
 
-    async def play_next(interaction: discord.Interaction):
+    async def play_song(interaction: discord.Interaction, song, channel):
         id = int(interaction.guild_id)
-        if client.queueIndex[id] + 1 < len(client.musicQueue[id]):
-            client.is_playing[id] = True
-            client.queueIndex[id] += 1
-
-            song = client.musicQueue[id][client.queueIndex[id]][0]
-            message = generate_embed.now_playing(interaction, song)
-            await interaction.channel.send(embed=message)
-
-            client.vc[id].play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), volume=VOLUME_FLOAT), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(interaction), client.loop))
+        if type(song) == type(True):
+            await interaction.followup.send('Could not fetch the song.')
+            return
         else:
-            if client.is_playing[id]:
-                await interaction.followup.send('There are no songs in the queue.')
-                client.is_playing[id] = False
-                
-                # Handle leave if inactive
-                if client.inactivity_check.get(id, False):
-                    client.inactivity_check[id].cancel()
-                client.inactivity_check[id] = asyncio.create_task(inactive_check(interaction, client, id))
+            if client.inactivity_check.get(id, False):
+                client.inactivity_check[id].cancel()
+                client.inactivity_check[id] = None
+                print('Inactivity check CANCELLED by PLAY SONG...', flush=True)
+            client.musicQueue[id].append([song, channel])
+            if not client.is_playing[id]:
+                await play_music(interaction)
+            else:
+                message = generate_embed.add_to_queue(interaction, song)
+                await interaction.followup.send(embed=message)
 
     async def play_music(interaction: discord.Interaction):
         id = int(interaction.guild_id)
@@ -229,22 +217,27 @@ def run_bot():
                 client.inactivity_check[id].cancel()
             client.inactivity_check[id] = asyncio.create_task(inactive_check(interaction, client, id))
 
-    async def play_song(interaction: discord.Interaction, song, channel):
+    async def play_next(interaction: discord.Interaction):
         id = int(interaction.guild_id)
-        if type(song) == type(True):
-            await interaction.followup.send('Could not fetch the song.')
-            return
+        if client.queueIndex[id] + 1 < len(client.musicQueue[id]):
+            client.is_playing[id] = True
+            client.queueIndex[id] += 1
+
+            song = client.musicQueue[id][client.queueIndex[id]][0]
+            message = generate_embed.now_playing(interaction, song)
+            await interaction.channel.send(embed=message)
+
+            client.vc[id].play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), volume=VOLUME_FLOAT), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(interaction), client.loop))
         else:
-            if client.inactivity_check.get(id, False):
-                client.inactivity_check[id].cancel()
-                client.inactivity_check[id] = None
-                print('Inactivity check CANCELLED by PLAY SONG...', flush=True)
-            client.musicQueue[id].append([song, channel])
-            if not client.is_playing[id]:
-                await play_music(interaction)
-            else:
-                message = generate_embed.add_to_queue(interaction, song)
-                await interaction.followup.send(embed=message)
+            client.queueIndex[id] += 1
+            if client.is_playing[id]:
+                await interaction.followup.send('There are no songs in the queue.')
+                client.is_playing[id] = False
+                
+                # Handle leave if inactive
+                if client.inactivity_check.get(id, False):
+                    client.inactivity_check[id].cancel()
+                client.inactivity_check[id] = asyncio.create_task(inactive_check(interaction, client, id))
 
     async def resultsYT(interaction: discord.Interaction, keywords):
         results = youtube.search_YT(keywords)
@@ -368,12 +361,10 @@ def run_bot():
         embed = generate_embed.skip(interaction, song)
         await interaction.response.send_message(embed=embed)
 
-        client.queueIndex[id] += 1
-        if client.queueIndex[id] == len(client.musicQueue[id]):
+        if client.queueIndex[id] + 1 == len(client.musicQueue[id]):
             await interaction.channel.send('There are no songs in the queue.')
             client.is_playing[id] = False
             client.vc[id].stop()
-
             # Handle leave if inactive
             if client.inactivity_check.get(id, False):
                 client.inactivity_check[id].cancel()
@@ -387,7 +378,7 @@ def run_bot():
     async def inactive_check(interaction, client, id):
         print('Starting inactivity check...', flush=True)
         try:
-            await asyncio.sleep(10)
+            await asyncio.sleep(30)
             try:
                 await client.vc[id].disconnect()
                 await interaction.channel.send('Nishinoya has left the chat due to inactivity.')
