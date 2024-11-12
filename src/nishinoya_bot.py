@@ -13,7 +13,7 @@ import generate_embed
 import youtube
 import spotify
 
-VERSION: Final[str] = 'v1.01'
+VERSION: Final[str] = 'v1.02'
 VOLUME_FLOAT: float = 0.35
 
 '''GET THE PATH TO THE JOIN.GIF FROM THE ROOT'''
@@ -396,4 +396,12 @@ def run_bot():
         except asyncio.CancelledError:
             print('Inactivity Check CANCELLED: Bot remains active...', flush=True)
 
+    '''
+    HELP FUNCTION
+    '''
+    @client.tree.command(name='help', description='Displays all the commands')
+    async def help(interaction: discord.Interaction):
+        id = int(interaction.guild_id)
+        embed = generate_embed.embed(interaction)
+        await interaction.response.send_message(embed=embed)
     client.run(BOT_TOKEN)

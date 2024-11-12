@@ -24,5 +24,3 @@ def get_spotify_song(search: str):
     artist = track['tracks']['items'][0]['artists'][0]['name']
     track_name = track['tracks']['items'][0]['name']
     return artist, track_name
-
-print(get_spotify_song('location'))
