@@ -150,12 +150,14 @@ def run_bot():
 
         if source == 'Spotify':
             try:
-                pass
+                artist, track_name = spotify.get_spotify_song(query)
+                song = extract_music_info('https://www.youtube.com/watch?v=' + youtube.spotify_to_YT(f'{artist} {track_name} audio'))
             except Exception as e:
                 print(f'Exception occurred: {e}')
                 await interaction.followup.send('Error with Spotify API. Likely ratelimited.')
                 return
-            await interaction.followup.send('Not implemented.')
+            song['title'] = f'{artist} - {track_name}'
+            await play_song(interaction, song, userChannel)
         elif source == 'Youtube':
             try:
                 input = await resultsYT(interaction, query)
@@ -320,13 +322,15 @@ def run_bot():
         id = int(interaction.guild_id)
         if not client.vc[id]:
             await interaction.response.send_message('There is no audio to be paused at the moment.')
-        elif interaction.user.voice.channel != client.vc[id]:
+        elif interaction.user.voice.channel != client.vc[id].channel:
             await interaction.response.send_message('You need to be connected to the same voice channel.')
         elif client.is_playing[id]:
             await interaction.response.send_message('Audio paused.')
             client.is_playing[id] = False
             client.is_paused[id] = True
             client.vc[id].pause()
+        else:
+            await interaction.response.send_message('Audio is already paused.')
 
     '''
     RESUME AUDIO FUNCTION
@@ -336,13 +340,15 @@ def run_bot():
         id = int(interaction.guild_id)
         if not client.vc[id]:
             await interaction.response.send_message('There is no audio to be resumed at the moment.')
-        elif interaction.user.voice.channel != client.vc[id]:
+        elif interaction.user.voice.channel != client.vc[id].channel:
             await interaction.response.send_message('You need to be connected to the same voice channel.')
         elif client.is_paused[id]:
             await interaction.response.send_message('Audio resumed.')
             client.is_playing[id] = True
             client.is_paused[id] = False
             client.vc[id].resume()
+        else:
+            await interaction.response.send_message('Audio is already playing.')
 
     '''
     SKIP MUSIC FUNCTION

@@ -37,3 +37,14 @@ def get_YT_title(url):
     html_content = request.urlopen(url).read().decode()
     title = re.search(r'<title>(.*?) - YouTube</title>', html_content)
     return title.group(1) if title else "Title not found"
+
+def spotify_to_YT(search: str):
+    searchResponse = youtube.search().list(
+        part = 'snippet',
+        maxResults = 1,
+        q = search,
+        regionCode = 'us',
+        relevanceLanguage = 'en',
+        type = 'video'
+    ).execute()
+    return searchResponse['items'][0]['id']['videoId']
