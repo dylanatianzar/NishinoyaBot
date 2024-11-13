@@ -13,7 +13,7 @@ import generate_embed
 import youtube
 import spotify
 
-VERSION: Final[str] = 'v1.02'
+VERSION: Final[str] = 'v1.1'
 VOLUME_FLOAT: float = 0.35
 
 '''GET THE PATH TO THE JOIN.GIF FROM THE ROOT'''
@@ -385,7 +385,7 @@ def run_bot():
     async def inactive_check(interaction, client, id):
         print('Starting inactivity check...', flush=True)
         try:
-            await asyncio.sleep(30)
+            await asyncio.sleep(60)
             try:
                 await client.vc[id].disconnect()
                 await interaction.channel.send('Nishinoya has left the chat due to inactivity.')
@@ -405,5 +405,5 @@ def run_bot():
         id = int(interaction.guild_id)
         embed = generate_embed.embed(interaction)
         await interaction.response.send_message(embed=embed)
-        
+
     client.run(BOT_TOKEN)
