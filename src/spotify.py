@@ -4,7 +4,9 @@ from dotenv import load_dotenv
 import base64
 from pathlib import Path
 
-# Load environment variables
+'''
+SPOTIFY CONSTANTS
+'''
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
@@ -30,14 +32,13 @@ def get_access_token():
     }
 
     # Make the POST request to get the token
-    auth_response = requests.post(auth_url, {
-        'grant_type': 'client_credentials',
-        'client_id': SPOTIFY_CLIENT_ID,
-        'client_secret': SPOTIFY_CLIENT_SECRET,
-    })
+    auth_response = requests.post(auth_url, headers=headers, data=data)
+
+    # Raise exception if connection is unsuccessful
+    auth_response.raise_for_status()
 
     response = auth_response.json()
-    # Check if the request was successful
+    
     return response['access_token']
 
 
@@ -58,5 +59,3 @@ def get_spotify_song(query):
     else:
         print("Error:", response.json())
         return None
-
-print(get_spotify_song('carti location'))

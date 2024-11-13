@@ -371,6 +371,7 @@ def run_bot():
             await interaction.channel.send('There are no songs in the queue.')
             client.is_playing[id] = False
             client.vc[id].stop()
+
             # Handle leave if inactive
             if client.inactivity_check.get(id, False):
                 client.inactivity_check[id].cancel()
@@ -404,4 +405,5 @@ def run_bot():
         id = int(interaction.guild_id)
         embed = generate_embed.embed(interaction)
         await interaction.response.send_message(embed=embed)
+        
     client.run(BOT_TOKEN)
