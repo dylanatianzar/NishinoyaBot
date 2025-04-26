@@ -190,6 +190,7 @@ def run_bot():
                 client.inactivity_check[id].cancel()
                 client.inactivity_check[id] = None
                 print('Inactivity check CANCELLED by PLAY SONG...', flush=True)
+            song['added_by'] = interaction.user;
             client.musicQueue[id].append([song, channel])
             if not client.is_playing[id]:
                 await play_music(interaction)
@@ -251,7 +252,7 @@ def run_bot():
             embedText += f'{i+1} - [{name}]({url})\n\n'
         
         searchResultsEmbed = discord.Embed(
-            title='First 10 Search Results',
+            title='First 5 Search Results',
             description=embedText + 'Use !play <number> to select or !cancel to cancel selection.',
             colour= 0x2c76dd
             )

@@ -12,7 +12,7 @@ def now_playing(interaction: discord.Interaction, song):
     title = song['title']
     link = song['link']
     thumbnail = song['thumbnail']
-    author = interaction.user
+    author = song['added_by']
     avatar = author.avatar.url
 
     embed = discord.Embed(
@@ -27,7 +27,7 @@ def add_to_queue(interaction: discord.Interaction, song):
     title = song['title']
     link = song['link']
     thumbnail = song['thumbnail']
-    author = interaction.user
+    author = song['added_by']
     avatar = author.avatar.url
 
     embed = discord.Embed(
