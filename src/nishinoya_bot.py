@@ -190,7 +190,7 @@ def run_bot():
                 client.inactivity_check[id].cancel()
                 client.inactivity_check[id] = None
                 print('Inactivity check CANCELLED by PLAY SONG...', flush=True)
-            song['added_by'] = interaction.user;
+            song['added_by'] = interaction.user
             client.musicQueue[id].append([song, channel])
             if not client.is_playing[id]:
                 await play_music(interaction)
@@ -253,7 +253,7 @@ def run_bot():
         
         searchResultsEmbed = discord.Embed(
             title='First 5 Search Results',
-            description=embedText + 'Use !play <number> to select or !cancel to cancel selection.',
+            description=embedText + 'Use !pick <number> to select or !cancel to cancel selection.\nExample: !pick 1',
             colour= 0x2c76dd
             )
 
@@ -262,7 +262,7 @@ def run_bot():
         def check(message: discord.Message):
             return (message.author == interaction.user 
                     and message.channel == interaction.channel
-                    and (message.content.startswith('!play ') or message.content == '!cancel'))
+                    and (message.content.startswith('!pick ') or message.content == '!cancel'))
 
         try:
             message = await client.wait_for('message', check=check, timeout=30.0)
@@ -386,7 +386,7 @@ def run_bot():
     async def inactive_check(interaction, client, id):
         print('Starting inactivity check...', flush=True)
         try:
-            await asyncio.sleep(60)
+            await asyncio.sleep(180)
             try:
                 await client.vc[id].disconnect()
                 await interaction.channel.send('Nishinoya has left the chat due to inactivity.')
