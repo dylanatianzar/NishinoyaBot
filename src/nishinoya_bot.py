@@ -265,7 +265,7 @@ def run_bot():
                     and (message.content.startswith('!pick ') or message.content == '!cancel'))
 
         try:
-            message = await client.wait_for('message', check=check, timeout=30.0)
+            message = await client.wait_for('message', check=check, timeout=45.0)
             tokens = message.content.split()
             if tokens[0] == '!cancel':
                 return None
