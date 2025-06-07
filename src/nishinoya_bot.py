@@ -350,6 +350,8 @@ def run_bot():
                 description=description,
                 colour=colour
             )
+        
+        await interaction.response.send_message(embed=rollEmbed)
 
     '''
     PAUSE AUDIO FUNCTION
