@@ -12,6 +12,7 @@ import re
 import generate_embed
 import youtube
 import spotify
+import random
 
 VERSION: Final[str] = 'v1.1'
 VOLUME_FLOAT: float = 0.35
@@ -314,6 +315,41 @@ def run_bot():
             await interaction.response.send_message('Nishinoya has left the chat.')
         else:
             await interaction.response.send_message('You are not in the same voice channel as Nishinoya.')
+
+    '''
+    ROLL CHECK FUNCTION
+    '''
+    @client.tree.command(name='roll', description='Nishinoya generates a random DC and roll for your check.')
+    async def roll(interaction: discord.Interaction, ability: Literal['Deception','Insight', 'Persuasion']):
+        dc = random.randint(5,20)
+        rolled = random.randint(0,20)
+        proficiencyCheck = random.randint(1,3)
+        guidance = 0
+        if (proficiencyCheck == 1):
+            guidance = random.randint(1,4)
+        
+        if guidance:
+            rolled += guidance
+
+        if dc >= rolled:
+            title='PASSED'
+            colour=0x0eaa51
+        else:
+            title='FAILED'
+            colour=0xdf1141
+
+        title += " " + ability + " Check"
+        
+        description = 'DC: ' + str(dc) + "\nYou rolled: " + str(rolled)
+
+        if guidance:
+            description += ' + guidance roll: ' + str(guidance) + " = " + str(rolled + guidance)
+        
+        rollEmbed = discord.Embed(
+                title=title,
+                description=description,
+                colour=colour
+            )
 
     '''
     PAUSE AUDIO FUNCTION
