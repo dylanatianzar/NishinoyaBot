@@ -331,7 +331,7 @@ def run_bot():
         if guidance:
             rolled += guidance
 
-        if dc >= rolled:
+        if rolled >= dc:
             title='PASSED'
             colour=0x0eaa51
         else:
