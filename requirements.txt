@@ -1,4 +1,5 @@
-discord.py==2.4.0
+# discord.py==2.5.2
+git+https://github.com/Rapptz/discord.py.git@refs/pull/10210/head#egg=discord.py
 google_api_python_client==2.149.0
 python-dotenv==1.0.1
 yt_dlp==2024.10.22
