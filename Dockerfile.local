@@ -6,8 +6,10 @@ RUN apt-get update && \
 
 RUN git clone 'https://github.com/dylanatianzar/NishinoyaBot.git'
 WORKDIR /NishinoyaBot
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt -U
+RUN pip install -U yt-dlp
 
+# Make sure to have cookies.txt in src folder
 WORKDIR /NishinoyaBot/src
 
 CMD ["python", "main.py"]
