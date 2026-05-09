@@ -1,4 +1,4 @@
-discord.py>=2.6.3
+discord.py>=2.7.0
 #git+https://github.com/Rapptz/discord.py.git@refs/pull/10210/head#egg=discord.py
 google_api_python_client>=2.149.0
 python-dotenv>=1.0.1
@@ -8,3 +8,4 @@ google-auth>=2.35.0
 google-auth-httplib2>=0.2.0
 google-auth-oauthlib>=1.2.1
 spotipy>=2.24.0
+davey>=0.1.5
