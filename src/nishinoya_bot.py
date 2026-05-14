@@ -63,7 +63,12 @@ def run_bot():
 
     client = MyClient(intents=intents)
 
-    ytdl_options: Final[dict] = {'format': 'bestaudio/best', 'noplaylist': 'True', 'cookiefile':'cookies.txt', 'javascript_runtime':'node'}
+    ytdl_options: Final[dict] = {'format': 'bestaudio/best', 
+                                 'noplaylist': 'True', 
+                                 'cookiefile':'cookies.txt', 
+                                 'javascript_runtime':['deno'],
+                                 'remote_components': ['ejs:github']}
+    
     ffmpeg_options: Final[dict] = {
                                 'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 
                                 'options': '-vn -af "loudnorm=i=-18:tp=-3:lra=7" -bufsize 64k -fflags +nobuffer'
