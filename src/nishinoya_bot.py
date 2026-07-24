@@ -14,8 +14,8 @@ import youtube
 import spotify
 import random
 
-VERSION: Final[str] = 'v1.1'
-VOLUME_FLOAT: float = 0.35
+VERSION: Final[str] = 'v1.2'
+VOLUME_FLOAT: float = 0.25
 
 '''GET THE PATH TO THE JOIN.GIF FROM THE ROOT'''
 BASE_DIR = Path(__file__).parent.resolve().parent
@@ -67,7 +67,9 @@ def run_bot():
                                  'noplaylist': 'True', 
                                  'cookiefile':'cookies.txt', 
                                  'javascript_runtime':['deno'],
-                                 'remote_components': ['ejs:github']}
+                                 'remote_components': ['ejs:github'],
+                                 'extractor_args': {'player_client': ['web', 'mweb', 'android', '-android_vr', '-android_sdkless']}
+                                }
     
     ffmpeg_options: Final[dict] = {
                                 'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 
@@ -103,7 +105,7 @@ def run_bot():
             client.vc[id] = await channel.connect()
 
             if client.vc[id] == None:
-                await interaction.response.send_message('Could not connect to the voice channel.')
+                await smart_send(interaction, 'Could not connect to the voice channel.')
                 return
         elif interaction.user.voice.channel == client.vc[id].channel:
             return
@@ -138,7 +140,7 @@ def run_bot():
     '''
     @client.tree.command(name='version', description=VERSION)
     async def version(interaction: discord.Interaction):
-        await interaction.response.send_message(VERSION)
+        await smart_send(interaction, VERSION)
 
 
     '''
@@ -149,10 +151,10 @@ def run_bot():
         try:
             userChannel = interaction.user.voice.channel
         except:
-            await interaction.response.send_message('You need to be connected to a voice channel.')
+            await smart_send(interaction, 'You need to be connected to a voice channel.')
             return
 
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=isPrivateChannel(interaction))
 
         if source == 'Spotify':
             try:
@@ -160,7 +162,7 @@ def run_bot():
                 song = extract_music_info('https://www.youtube.com/watch?v=' + youtube.spotify_to_YT(f'{artist} {track_name} audio'))
             except Exception as e:
                 print(f'Exception occurred: {e}')
-                await interaction.followup.send('Error with Spotify API. Likely ratelimited.')
+                await smart_send(interaction, 'Error with Spotify API. Likely ratelimited.')
                 return
             song['title'] = f'{artist} - {track_name}'
             await play_song(interaction, song, userChannel)
@@ -169,10 +171,10 @@ def run_bot():
                 input = await resultsYT(interaction, query)
             except Exception as e:
                 print(f'Exception occurred: {e}')
-                await interaction.followup.send('Error with YouTube Search. Likely ratelimited for day.')
+                await smart_send(interaction, 'Error with YouTube Search. Likely ratelimited for day.')
                 return
             if input == None:
-                await interaction.followup.send('Action cancelled or could not fetch results.')
+                await smart_send(interaction, 'Action cancelled or could not fetch results.')
                 return
             song = extract_music_info(input)
             await play_song(interaction, song, userChannel)
@@ -180,16 +182,16 @@ def run_bot():
             try:
                 song = extract_music_info(query)
             except:
-                await interaction.followup.send('Invalid URL.')
+                await smart_send(interaction, 'Invalid URL.')
                 return
             await play_song(interaction, song, userChannel)
         else:
-            await interaction.followup.send('Invalid source. Select a valid source.')
+            await smart_send(interaction, 'Invalid source. Select a valid source.')
 
     async def play_song(interaction: discord.Interaction, song, channel):
         id = int(interaction.guild_id)
         if type(song) == type(True):
-            await interaction.followup.send('Could not fetch the song.')
+            await smart_send(interaction, 'Could not fetch the song.')
             return
         else:
             if client.inactivity_check.get(id, False):
@@ -202,7 +204,7 @@ def run_bot():
                 await play_music(interaction)
             else:
                 message = generate_embed.add_to_queue(interaction, song)
-                await interaction.followup.send(embed=message)
+                await smart_send(interaction, embed=message)
 
     async def play_music(interaction: discord.Interaction):
         id = int(interaction.guild_id)
@@ -214,11 +216,11 @@ def run_bot():
             song = client.musicQueue[id][client.queueIndex[id]][0]
 
             message = generate_embed.now_playing(interaction, song)
-            await interaction.followup.send(embed=message)
+            await smart_send(interaction,embed=message)
 
             client.vc[id].play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), volume=VOLUME_FLOAT), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(interaction), client.loop))
         else:
-            await interaction.followup.send('ERROR: queueIndex >= musicQueue')
+            await smart_send(interaction, 'ERROR: queueIndex >= musicQueue')
             client.is_playing[id] = False
 
             # Handle leave if inactive
@@ -234,13 +236,13 @@ def run_bot():
 
             song = client.musicQueue[id][client.queueIndex[id]][0]
             message = generate_embed.now_playing(interaction, song)
-            await interaction.channel.send(embed=message)
+            await smart_send(interaction, embed=message, use_channel_fallback=True)
 
             client.vc[id].play(discord.PCMVolumeTransformer(discord.FFmpegPCMAudio(song['source'], **ffmpeg_options), volume=VOLUME_FLOAT), after=lambda e: asyncio.run_coroutine_threadsafe(play_next(interaction), client.loop))
         else:
             client.queueIndex[id] += 1
             if client.is_playing[id]:
-                await interaction.followup.send('There are no songs in the queue.')
+                await smart_send(interaction, 'There are no songs in the queue.', use_channel_fallback=True)
                 client.is_playing[id] = False
                 
                 # Handle leave if inactive
@@ -263,7 +265,7 @@ def run_bot():
             colour= 0x2c76dd
             )
 
-        await interaction.followup.send(embed=searchResultsEmbed)
+        await smart_send(interaction, embed=searchResultsEmbed)
 
         def check(message: discord.Message):
             return (message.author == interaction.user 
@@ -280,7 +282,7 @@ def run_bot():
             else:
                 'Either invalid choice or format.'
         except asyncio.TimeoutError:
-            await interaction.followup.send('You took too long to reply. Please search again.')
+            await smart_send(interaction, 'You took too long to reply. Please search again.')
             return None
 
     '''
@@ -290,9 +292,9 @@ def run_bot():
     async def sync(interaction: discord.Interaction):
         if interaction.user.id == USER_ID:
             synced = await client.tree.sync()
-            await interaction.response.send_message(f'Command Tree synced {len(synced)} commands: {[cmd.name for cmd in synced]}', ephemeral=True)
+            await smart_send(interaction, f'Command Tree synced {len(synced)} commands: {[cmd.name for cmd in synced]}', ephemeral=True)
         else:
-            await interaction.response.send_message('You are not dylan.')
+            await smart_send(interaction, 'You are not dylan.')
 
     '''
     DIRECT JOIN VOICE FUNCTION
@@ -301,9 +303,9 @@ def run_bot():
     async def join(interaction: discord.Interaction):
         if interaction.user.voice:
             await join_voice(interaction, interaction.user.voice.channel)
-            await interaction.response.send_message(f'Nishinoya has joined {interaction.user.voice.channel}')
+            await smart_send(interaction, f'Nishinoya has joined {interaction.user.voice.channel}')
         else:
-            await interaction.response.send_message('You need to be connected to a voice channel.')
+            await smart_send(interaction, 'You need to be connected to a voice channel.')
 
     '''
     DIRECT LEAVE VOICE FUNCTION
@@ -312,14 +314,14 @@ def run_bot():
     async def leave(interaction: discord.Interaction):
         id = int(interaction.guild_id)
         if client.vc[id] == None:
-            await interaction.response.send_message('Nishinoya is not in a voice channel.')
+            await smart_send(interaction, 'Nishinoya is not in a voice channel.')
         elif client.vc[id] != None and interaction.user.voice.channel == client.vc[id].channel:
             await client.vc[id].disconnect()
             client.vc[id] = None
             reset_music_variables(client, id)
-            await interaction.response.send_message('Nishinoya has left the chat.')
+            await smart_send(interaction, 'Nishinoya has left the chat.')
         else:
-            await interaction.response.send_message('You are not in the same voice channel as Nishinoya.')
+            await smart_send(interaction, 'You are not in the same voice channel as Nishinoya.')
 
     '''
     ROLL CHECK FUNCTION
@@ -356,7 +358,7 @@ def run_bot():
                 colour=colour
             )
         
-        await interaction.response.send_message(embed=rollEmbed)
+        await smart_send(interaction, embed=rollEmbed)
 
     '''
     PAUSE AUDIO FUNCTION
@@ -365,16 +367,16 @@ def run_bot():
     async def pause(interaction: discord.Interaction):
         id = int(interaction.guild_id)
         if not client.vc[id]:
-            await interaction.response.send_message('There is no audio to be paused at the moment.')
+            await smart_send(interaction, 'There is no audio to be paused at the moment.')
         elif interaction.user.voice.channel != client.vc[id].channel:
-            await interaction.response.send_message('You need to be connected to the same voice channel.')
+            await smart_send(interaction, 'You need to be connected to the same voice channel.')
         elif client.is_playing[id]:
-            await interaction.response.send_message('Audio paused.')
+            await smart_send(interaction, 'Audio paused.')
             client.is_playing[id] = False
             client.is_paused[id] = True
             client.vc[id].pause()
         else:
-            await interaction.response.send_message('Audio is already paused.')
+            await smart_send(interaction, 'Audio is already paused.')
 
     '''
     RESUME AUDIO FUNCTION
@@ -383,16 +385,16 @@ def run_bot():
     async def resume(interaction: discord.Interaction):
         id = int(interaction.guild_id)
         if not client.vc[id]:
-            await interaction.response.send_message('There is no audio to be resumed at the moment.')
+            await smart_send(interaction, 'There is no audio to be resumed at the moment.')
         elif interaction.user.voice.channel != client.vc[id].channel:
-            await interaction.response.send_message('You need to be connected to the same voice channel.')
+            await smart_send(interaction, 'You need to be connected to the same voice channel.')
         elif client.is_paused[id]:
-            await interaction.response.send_message('Audio resumed.')
+            await smart_send(interaction, 'Audio resumed.')
             client.is_playing[id] = True
             client.is_paused[id] = False
             client.vc[id].resume()
         else:
-            await interaction.response.send_message('Audio is already playing.')
+            await smart_send(interaction, 'Audio is already playing.')
 
     '''
     SKIP MUSIC FUNCTION
@@ -401,18 +403,18 @@ def run_bot():
     async def skip(interaction: discord.Interaction):
         id = int(interaction.guild_id)
         if not client.vc[id]:
-            await interaction.response.send_message('The bot is not in a voice channel.')
+            await smart_send(interaction, 'The bot is not in a voice channel.')
             return
         elif interaction.user.voice.channel != client.vc[id].channel:
-            await interaction.response.send_message('You need to be connected to the same voice channel.')
+            await smart_send(interaction, 'You need to be connected to the same voice channel.')
             return
         
         song = client.musicQueue[id][client.queueIndex[id]][0]
         embed = generate_embed.skip(interaction, song)
-        await interaction.response.send_message(embed=embed)
+        await smart_send(interaction, embed=embed)
 
         if client.queueIndex[id] + 1 == len(client.musicQueue[id]):
-            await interaction.channel.send('There are no songs in the queue.')
+            await smart_send(interaction, 'There are no songs in the queue.', use_channel_fallback=True)
             client.is_playing[id] = False
             client.vc[id].stop()
 
@@ -432,7 +434,7 @@ def run_bot():
             await asyncio.sleep(180)
             try:
                 await client.vc[id].disconnect()
-                await interaction.channel.send('Nishinoya has left the chat due to inactivity.')
+                await smart_send(interaction, 'Nishinoya has left the chat due to inactivity.', use_channel_fallback=True)
                 client.vc[id] = None
                 reset_music_variables(client, id)
                 print('LEFT DUE TO INACTIVITY', flush=True)
@@ -442,12 +444,46 @@ def run_bot():
             print('Inactivity Check CANCELLED: Bot remains active...', flush=True)
 
     '''
-    HELP FUNCTION
+    HELPER FUNCTIONS
     '''
     @client.tree.command(name='help', description='Displays all the commands')
     async def help(interaction: discord.Interaction):
         id = int(interaction.guild_id)
         embed = generate_embed.embed(interaction)
-        await interaction.response.send_message(embed=embed)
+        await smart_send(interaction, embed=embed)
+    
+    # checks if the channel is private to send an ephemeral message instead
+    def isPrivateChannel(interaction: discord.Interaction) -> bool:
+        user = interaction.user
+
+        voice_channel = user.voice.channel
+        everyoneRole_perms = voice_channel.permissions_for(voice_channel.guild.default_role)
+        return not everyoneRole_perms.view_channel
+    
+    async def smart_send(interaction:discord.Interaction,
+                         content: str | None = None,
+                         *,
+                         ephemeral: bool | None = None,
+                         use_channel_fallback: bool = False,
+                         **kwargs):
+        if ephemeral is None:
+            ephemeral = isPrivateChannel(interaction)
+        
+        # Standard Interaction Response (First response)
+        if not interaction.response.is_done():
+            await interaction.response.send_message(content, ephemeral=ephemeral, **kwargs)
+            return None
+
+        # Channel Send Fallback (must be requested)
+        # Note: Channel messages CANNOT be ephemeral in Discord.
+        elif use_channel_fallback and interaction.channel and not ephemeral:
+            # Strip 'ephemeral' from kwargs if it got passed through
+            kwargs.pop("ephemeral", None)
+            return await interaction.channel.send(content, **kwargs)
+
+        # Interaction Followup (Subsequent responses)
+        else:
+            return await interaction.followup.send(content, ephemeral=ephemeral, **kwargs)
+
 
     client.run(BOT_TOKEN)
